@@ -22,6 +22,8 @@ func TestSource(t *testing.T) {
 	RunSpecs(t, "Zap Log Suite")
 }
 
+const testMessage = "This is a test message"
+
 var _ = Describe("Zap log level flag options setup", func() {
 	var (
 		fs             flag.FlagSet
@@ -189,7 +191,7 @@ var _ = Describe("Zap log level flag options setup", func() {
 			logOut := new(bytes.Buffer)
 
 			logger := New(UseFlagOptions(&opts), crzap.WriteTo(logOut))
-			logger.Info("This is a test message")
+			logger.Info(testMessage)
 
 			outRaw := logOut.Bytes()
 
@@ -202,43 +204,43 @@ var _ = Describe("Zap log level flag options setup", func() {
 
 	Context("with zap-encoding flag provided", Label("encoder"), func() {
 
-		It("Should set console encoder in options", func() {
-			os.Setenv("ZAP_ENCODER", "console")
-			defer os.Unsetenv("ZAP_ENCODER")
+		It("Should default to console encoder when not set (in development mode)", func() {
+			os.Setenv("ZAP_DEVEL", "true")
+			defer os.Unsetenv("ZAP_DEVEL")
 
-			opt := crzap.Options{}
-			UseFlagOptions(&opts)(&opt)
+			logOut := new(bytes.Buffer)
 
-			optVal := reflect.ValueOf(opt.NewEncoder)
-			expVal := reflect.ValueOf(newConsoleEncoder)
+			logger := New(UseFlagOptions(&opts), crzap.WriteTo(logOut))
+			logger.Info(testMessage)
 
-			Expect(optVal.Pointer()).To(Equal(expVal.Pointer()))
+			outRaw := logOut.String()
+			expectedPattern := `.+\tINFO\tThis is a test message\n`
+			Expect(outRaw).Should(MatchRegexp(expectedPattern))
 		})
 
 		It("Should set json encoder in options", func() {
 			os.Setenv("ZAP_ENCODER", "json")
 			defer os.Unsetenv("ZAP_ENCODER")
 
-			opt := crzap.Options{}
-			UseFlagOptions(&opts)(&opt)
+			logOut := new(bytes.Buffer)
 
-			optVal := reflect.ValueOf(opt.NewEncoder)
-			expVal := reflect.ValueOf(newJSONEncoder)
+			logger := New(UseFlagOptions(&opts), crzap.WriteTo(logOut))
+			logger.Info(testMessage)
 
-			Expect(optVal.Pointer()).To(Equal(expVal.Pointer()))
+			outRaw := logOut.Bytes()
+
+			Expect(json.Valid(outRaw)).To(BeTrue())
 		})
 
 		It("Should default to json encoder when not set", func() {
-			os.Setenv("ZAP_ENCODER", "")
-			defer os.Unsetenv("ZAP_ENCODER")
+			logOut := new(bytes.Buffer)
 
-			opt := crzap.Options{}
-			UseFlagOptions(&opts)(&opt)
+			logger := New(UseFlagOptions(&opts), crzap.WriteTo(logOut))
+			logger.Info(testMessage)
 
-			optVal := reflect.ValueOf(opt.NewEncoder)
-			expVal := reflect.ValueOf(newJSONEncoder)
+			outRaw := logOut.Bytes()
 
-			Expect(optVal.Pointer()).To(Equal(expVal.Pointer()))
+			Expect(json.Valid(outRaw)).To(BeTrue())
 		})
 
 		It("should PANIC when invalid encoder is supplied", func() {
@@ -258,10 +260,8 @@ var _ = Describe("Zap log level flag options setup", func() {
 
 			logOut := new(bytes.Buffer)
 
-			msg := "This is a test message"
-
 			logger := New(UseFlagOptions(&opts), crzap.WriteTo(logOut))
-			logger.Info(msg)
+			logger.Info(testMessage)
 
 			outRaw := logOut.String()
 			expectedPattern := `.+\tINFO\tThis is a test message\n`
@@ -276,10 +276,8 @@ var _ = Describe("Zap log level flag options setup", func() {
 
 			logOut := new(bytes.Buffer)
 
-			msg := "This is a test message"
-
 			logger := New(UseFlagOptions(&opts), crzap.WriteTo(logOut))
-			logger.Info(msg)
+			logger.Info(testMessage)
 
 			outRaw := logOut.String()
 			expectedPattern := `{\"level\":\"info\",\"ts\":\".+\",\"msg\":\"This is a test message\"}\n`
