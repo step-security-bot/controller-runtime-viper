@@ -1,7 +1,6 @@
 package zap
 
 import (
-	"encoding"
 	"flag"
 	"fmt"
 	"io"
@@ -97,7 +96,6 @@ func New(opts ...crzap.Opts) logr.Logger {
 var (
 	levelEnablerType   = reflect.TypeOf((*zapcore.LevelEnabler)(nil)).Elem()
 	newEncoderFuncType = reflect.TypeOf((*crzap.NewEncoderFunc)(nil)).Elem()
-	timeEncoderType    = reflect.TypeOf((*zapcore.TimeEncoder)(nil)).Elem()
 )
 
 /*
@@ -131,13 +129,22 @@ var levelStrings = map[string]zapcore.Level{
 	"panic": zap.PanicLevel,
 }
 
-func zapHook() mapstructure.DecodeHookFuncType {
+func zapHook() mapstructure.DecodeHookFunc {
+	return mapstructure.ComposeDecodeHookFunc(
+		stringToLevelEnablerHookFunc(),
+		stringToNewEncoderFuncHookFunc(),
+		mapstructure.TextUnmarshallerHookFunc(),
+	)
+}
+
+func stringToLevelEnablerHookFunc() mapstructure.DecodeHookFuncType {
 	return func(in reflect.Type, out reflect.Type, val interface{}) (interface{}, error) {
 		if in.Kind() == reflect.String && out == levelEnablerType {
 			sVal := val.(string)
 			// return nil if ZAP_LOG_LEVEL is not set, crzap lib sets the default value
 			if sVal == "" {
-				return nil, nil
+				var v zapcore.LevelEnabler
+				return &v, nil
 			}
 
 			// ZAP_LOG_LEVEL supports setting of integer value > 0 in addition to `info`, `error` or `debug`
@@ -157,7 +164,15 @@ func zapHook() mapstructure.DecodeHookFuncType {
 			}
 
 			return zap.NewAtomicLevelAt(level), nil
-		} else if in.Kind() == reflect.String && out == newEncoderFuncType {
+		}
+
+		return val, nil
+	}
+}
+
+func stringToNewEncoderFuncHookFunc() mapstructure.DecodeHookFuncType {
+	return func(in reflect.Type, out reflect.Type, val interface{}) (interface{}, error) {
+		if in.Kind() == reflect.String && out == newEncoderFuncType {
 			// TODO: implement encoding.TextUnmarshaler interface for type NewEncoderFunc upstream
 			var encoder crzap.NewEncoderFunc
 
@@ -174,19 +189,6 @@ func zapHook() mapstructure.DecodeHookFuncType {
 			}
 
 			return encoder, nil
-		} else if in.Kind() == reflect.String && out == timeEncoderType {
-			timeEncoder := reflect.New(timeEncoderType).Interface()
-
-			unmarshaller, ok := timeEncoder.(encoding.TextUnmarshaler)
-			if !ok {
-				return val, nil
-			}
-
-			if err := unmarshaller.UnmarshalText([]byte(val.(string))); err != nil {
-				return nil, err
-			}
-
-			return timeEncoder, nil
 		}
 
 		return val, nil
